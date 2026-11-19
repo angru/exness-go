@@ -2,6 +2,11 @@
 
 ## Unreleased — 2026-11-19
 
+- Fix discovery concurrency: queued callers honor context cancellation/deadlines,
+  and `Close` no longer waits for a discovery network call. Cached reads may
+  continue while an explicit refresh runs.
+- Add five bounded native fuzz targets and real loopback TLS tests for cancellation,
+  deadlines, truncation, redirects, request signing and connection lifecycle.
 - Add instrument conditions, candle history and existing operation status,
   completing the pinned contract's read-only REST operations.
 - Validate candle timeframe, price type, count/range combinations and identifier

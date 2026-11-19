@@ -11,12 +11,14 @@ cover bid/ask/both candles and all operation states. Exact instrument monetary
 values and optional fields are preserved; malformed query combinations fail before
 network calls. The upstream candle oneOf ambiguity is documented in README.md.
 
-## Next: strengthen offline verification
+## Completed: generated inputs and local HTTPS verification
 
-- Native Go fuzz tests for decimal JSON, key parsing, URLs and pagination metadata.
-- A local HTTP server for cancellation, timeout and connection-reuse scenarios.
-- Extend malformed-response checks and cross-language compatibility cases.
-- Review contract changes explicitly before updating models and fixtures.
+- Five native fuzz targets cover decimal arithmetic/JSON, key parsing, origins,
+  cursor signing and pagination. Seeds run in every test suite; CI fuzzing is bounded.
+- Local TLS servers exercise cancellation, deadlines, truncated bodies, redirects,
+  connection reuse and closure. Discovery waiters now respect their own context.
+- Continue reviewing contract changes and cross-language compatibility explicitly
+  before updating models and fixtures.
 
 ## Streaming
 

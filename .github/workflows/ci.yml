@@ -18,4 +18,11 @@ jobs:
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test -race -cover ./...
+      - name: Bounded native fuzzing
+        if: matrix.go == '1.27.x'
+        shell: bash
+        run: |
+          for target in Decimal Credentials Origins CursorEncoding Pagination; do
+            go test -run '^$' -fuzz "^Fuzz${target}$" -fuzztime 5s -parallel 2 .
+          done
       - run: go build ./...

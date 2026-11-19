@@ -51,14 +51,15 @@ type Config struct {
 
 // Client is safe for concurrent use. Close prevents new operations; in-flight calls may finish.
 type Client struct {
-	credentials  Credentials
-	accountID    string
-	discoveryURL string
-	http         *http.Client
-	mu           sync.Mutex
-	accessPoint  string
-	closed       bool
-	clock        func() time.Time
+	credentials   Credentials
+	accountID     string
+	discoveryURL  string
+	http          *http.Client
+	mu            sync.Mutex
+	discoveryGate chan struct{}
+	accessPoint   string
+	closed        bool
+	clock         func() time.Time
 }
 
 var accountPattern = regexp.MustCompile(`^[1-9][0-9]{0,19}$`)
@@ -105,7 +106,7 @@ func NewClient(config Config) (*Client, error) {
 	}
 	return &Client{
 		credentials: *config.Credentials, accountID: config.AccountID, discoveryURL: host,
-		clock: time.Now,
+		clock: time.Now, discoveryGate: make(chan struct{}, 1),
 		http: &http.Client{
 			Timeout: config.Timeout, Transport: transport,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -167,14 +168,42 @@ func (c *Client) get(ctx context.Context, host, path string, query url.Values, r
 
 // Discover resolves the account host once. Set refresh after an account migration.
 func (c *Client) Discover(ctx context.Context, refresh bool) (string, error) {
+	if ctx == nil {
+		return "", errors.New("invalid request context")
+	}
+	if err := ctx.Err(); err != nil {
+		return "", &TransportError{cause: err}
+	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.closed {
+		c.mu.Unlock()
 		return "", errors.New("Exness Client is closed")
 	}
 	if c.accessPoint != "" && !refresh {
-		return c.accessPoint, nil
+		host := c.accessPoint
+		c.mu.Unlock()
+		return host, nil
 	}
+	c.mu.Unlock()
+	// Serialize discovery without holding the state mutex across network I/O.
+	// A caller waiting for another discovery must still honor its own context.
+	select {
+	case c.discoveryGate <- struct{}{}:
+		defer func() { <-c.discoveryGate }()
+	case <-ctx.Done():
+		return "", &TransportError{cause: ctx.Err()}
+	}
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return "", errors.New("Exness Client is closed")
+	}
+	if c.accessPoint != "" && !refresh {
+		host := c.accessPoint
+		c.mu.Unlock()
+		return host, nil
+	}
+	c.mu.Unlock()
 	var result struct {
 		AccessPoint string  `json:"access_point"`
 		AccountID   *string `json:"account_id"`
@@ -189,7 +218,11 @@ func (c *Client) Discover(ctx context.Context, refresh bool) (string, error) {
 	if err != nil {
 		return "", &ProtocolError{"Discovery returned an invalid HTTPS origin"}
 	}
-	c.accessPoint = host
+	c.mu.Lock()
+	if !c.closed {
+		c.accessPoint = host
+	}
+	c.mu.Unlock()
 	return host, nil
 }
 

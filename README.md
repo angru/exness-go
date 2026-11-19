@@ -131,7 +131,9 @@ not success. Rejection/failure codes remain model fields; HTTP failures return
 - All requests take a `context.Context`. Default total HTTP timeout: 15 seconds;
   override with `Config.Timeout`. Responses are limited to 16 MiB.
 - `Client` supports concurrent calls and serializes cached discovery. Explicit
-  `Discover(ctx, true)` refreshes the host. `Close` closes idle connections and
+  `Discover(ctx, true)` refreshes the host. Callers waiting for discovery honor
+  their own context; cached reads can continue while an explicit refresh runs.
+  `Close` does not wait for discovery, closes idle connections and
   prevents new operations; in-flight calls can finish. Custom transports must be
   safe for concurrent use. Environment proxies are ignored by the default transport.
 - No SDK retry loop is installed; HTTP errors including 429 are returned directly.
@@ -152,8 +154,20 @@ go build ./...
 ```
 
 CI checks formatting, vet, race-enabled tests and build on Go 1.26 and 1.27.
-Tests use synthetic keys and mocked RoundTrippers; no credentials or network are
-required. JSON fixtures are copied from the [Python SDK](https://github.com/angru/exness-python/tree/main/tests/fixtures) and must
+Native fuzz targets cover exact decimal arithmetic/JSON, key parsing, HTTPS origins,
+cursor encoding/signing and pagination termination. Seeds run with ordinary tests;
+CI also fuzzes each target for five seconds on Go 1.27. To explore longer locally:
+
+```sh
+go test -run '^$' -fuzz '^FuzzDecimal$' -fuzztime 1m -parallel 2 .
+```
+
+Tests use synthetic keys, mocked RoundTrippers and loopback HTTPS servers with
+test certificates. No Exness account or external service is required, but local
+socket binding must be allowed. Real connections exercise cancellation (including
+queued discovery), header/body deadlines, truncated responses, redirect refusal,
+signature verification, connection reuse and idle-connection closure.
+JSON fixtures are copied from the [Python SDK](https://github.com/angru/exness-python/tree/main/tests/fixtures) and must
 be kept in sync. `signing-vector.json` was independently signed by OpenSSL and is
 checked byte-for-byte by both SDKs. Python tests validate response fixtures against
 the pinned OpenAPI snapshot; Go tests consume the same fixtures independently.
