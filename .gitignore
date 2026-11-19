@@ -1,0 +1,7 @@
+.tools/
+coverage.out
+*.test
+.env
+*.pem
+*.key
+.DS_Store
