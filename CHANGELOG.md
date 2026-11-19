@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased — 2026-11-19
+## v0.1.0-alpha.7 — 2026-11-19
+
+- Review and document the public API and cross-language lifecycle/validation limits.
+- Add neutral StreamOptions/StreamGap aliases with full legacy-name compatibility.
+- Exercise all public stream adapters from an external package, including typed
+  options and cancellation errors. Prepare the first tagged alpha release.
 
 - Add typed account-state, instrument and HMR streams over the existing signed
   transport, with copied/validated selections and opt-in reconnect gaps.

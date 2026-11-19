@@ -66,6 +66,13 @@ type TickStreamEvent struct {
 	Gap  *TickStreamGap
 }
 
+// StreamOptions is the neutral name for all WebSocket subscription options.
+// TickStreamOptions, TradingStreamOptions and ServerStreamOptions remain compatible.
+type StreamOptions = TickStreamOptions
+
+// StreamGap signals a possible loss of continuity in any WebSocket subscription.
+type StreamGap = TickStreamGap
+
 // StreamClosed reports a terminal remote close code or local message-size limit.
 // Arbitrary server close reason text is deliberately omitted.
 type StreamClosed struct{ Code int }

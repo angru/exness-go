@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-// APIError reports a non-200 response. ErrorMessage is untrusted server text.
+// APIError reports an unsuccessful REST response or WebSocket handshake. ErrorMessage is untrusted server text.
 type APIError struct {
 	StatusCode   int
 	Code         *int
@@ -45,11 +45,12 @@ type Config struct {
 	Credentials  *Credentials
 	AccountID    string
 	DiscoveryURL string
-	Timeout      time.Duration     // Zero selects 15 seconds. Negative values are invalid.
+	Timeout      time.Duration     // REST timeout; zero selects 15 seconds. WebSockets use StreamOptions.OpenTimeout.
 	Transport    http.RoundTripper // Optional; Close closes its idle connections.
 }
 
-// Client is safe for concurrent use. Close prevents new operations; in-flight calls may finish.
+// Client is safe for concurrent use. Close prevents new operations and cancels
+// active streams; in-flight REST calls may finish.
 type Client struct {
 	credentials    Credentials
 	accountID      string

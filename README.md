@@ -1,7 +1,7 @@
 # Exness Go
 
 Unofficial, read-only Go SDK for the public Exness Trading API (contract 1.0.2).
-Initial alpha; no tagged release yet and not verified against a live account.
+Alpha v0.1.0-alpha.7; not verified against a live account.
 Go **1.26+**. WebSocket transport uses [coder/websocket](https://github.com/coder/websocket)
 (v1.8.15); REST and signing use the standard library.
 
@@ -16,10 +16,10 @@ events. Trading mutations remain future work.
 In your Go module:
 
 ```sh
-go get github.com/angru/exness-go@main
+go get github.com/angru/exness-go@v0.1.0-alpha.7
 ```
 
-Go records the resolved pseudo-version in your module. For local development,
+Go records the explicit prerelease version in your module. For local development,
 clone the repository and optionally use a `replace` directive pointing to your checkout.
 
 ```go
@@ -413,3 +413,11 @@ strings use weekly schedules such as `Mon, 13:00:00`. Both are preserved verbati
 no timezone, recurrence calculation or "active now" flag is inferred. All synthetic
 fixtures are shared across SDKs and checked against the pinned OpenAPI. Live Exness
 interoperability remains unverified.
+
+## Reviewed alpha API
+
+Prefer `StreamOptions` and `StreamGap` for all five stream types. Existing
+`TickStream*`, `TradingStream*` and `ServerStream*` aliases remain supported.
+[API_REVIEW.md](API_REVIEW.md) maps the full Python/Go surface and records model,
+error, lifecycle and timeout differences. [RELEASE.md](RELEASE.md) contains the
+alpha release notes, installation instructions and publication procedure.
