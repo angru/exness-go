@@ -2,6 +2,12 @@
 
 ## Unreleased — 2026-11-19
 
+- Add signed transactions streaming with typed snapshot/delta/result models and
+  a fresh-snapshot requirement on every connection. Share the tick transport and
+  its bounded reconnects, gap reporting and cancellation behavior.
+- Add shared Python fixtures, TLS recovery/cancellation tests, a read-trading
+  example and caller-owned cache reconciliation guidance.
+
 - Add signed live tick streams using coder/websocket v1.8.15, with optional
   bounded reconnects, exponential backoff and explicit gap events. Cancellation,
   early iteration exit and client closure release active sockets.

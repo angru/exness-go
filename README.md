@@ -8,8 +8,8 @@ Go **1.26+**. WebSocket transport uses [coder/websocket](https://github.com/code
 Supports signed Gateway discovery, account details, instrument names and conditions,
 trading snapshot, API limits, paginated orders/deals history, candle history and
 existing operation status. All nine read-only REST operations in the pinned
-contract are covered, plus discovery and live WebSocket ticks. Trading mutations
-and trading-event streams are follow-up work.
+contract are covered, plus discovery, live WebSocket ticks and transaction events. Trading mutations
+and account/instrument/HMR streams are follow-up work.
 
 ## Installation
 
@@ -137,7 +137,7 @@ not success. Rejection/failure codes remain model fields; HTTP failures return
   `Discover(ctx, true)` refreshes the host. Callers waiting for discovery honor
   their own context; cached reads can continue while an explicit refresh runs.
   `Close` does not wait for discovery, closes idle connections and
-  prevents new operations. In-flight REST calls can finish; active tick streams
+  prevents new operations. In-flight REST calls can finish; active WebSocket streams
   are canceled, including their discovery and reconnect waits. Custom transports must be
   safe for concurrent use. Environment proxies are ignored by the default transport.
 - REST calls have no SDK retry loop; HTTP errors including 429 are returned directly.
@@ -280,3 +280,58 @@ slow consumers, message limits, certificate validation and handshake deadlines.
 See [ROADMAP.md](ROADMAP.md) for planned work without a live account. SDK code is
 available under the [MIT license](LICENSE). The public RFC 8032 test key is
 attributed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Trading events
+
+```go
+for event, err := range client.StreamTrading(ctx, exness.TradingStreamOptions{MaxReconnects: 3}) {
+    if err != nil { return err }
+    switch {
+    case event.Gap != nil:
+        fmt.Println("State is stale; waiting for a fresh snapshot")
+    case event.Snapshot != nil:
+        fmt.Println("New baseline", len(event.Snapshot.Positions))
+    case event.Transaction != nil:
+        fmt.Println("Changed positions", len(event.Transaction.Payload.Positions))
+    }
+}
+```
+
+Run `go run ./examples/read-trading` with the same four `EXN_*` variables.
+`TradingStreamEvent` contains exactly one `Snapshot`, `Transaction` or `Gap` when
+there is no error. `TradingStreamOptions` and `TradingStreamGap` alias their tick
+counterparts. Breaking iteration or canceling the context releases the connection.
+
+The `transactions` subscription sends a full `trading_state_snapshot`, followed by
+`transaction_event` deltas. The SDK requires a valid snapshot before yielding any
+transaction on **every** connection, including after reconnect. A transaction
+received before that boundary is a terminal protocol error. Repeated snapshots
+are accepted as replacement baselines. Each subscription uses a fresh request ID.
+
+Recovery belongs to the caller's application state:
+
+1. On a gap, mark the previous cache stale immediately; on termination (including
+   normal close), it is no longer live either.
+2. Replace cached active orders, open positions and account state with the next
+   snapshot. Do not merge a new baseline into stale state.
+3. Apply subsequent transaction payloads as **changed entities**, not full lists.
+   Retain an open position after a partial close; remove closed positions and
+   terminal orders from an active-state view. Missing entities are not deletions.
+4. Use order/deal history separately if missed historical changes matter. Snapshots
+   cannot reconstruct missed transactions. There is no resume token, replay or
+   exactly-once guarantee; the SDK does not merge, deduplicate or poll implicitly.
+
+`status` is optional: `success`, `rejected` and `failed` are supported. Rejected or
+failed operations with empty payloads are still **data events**, even when they
+contain `error_message`; subscription errors instead raise/return `WebSocketAPIError`.
+An absent status is not inferred as success. `operation_id` can be absent for
+balance or system changes. Monetary values remain exact decimals; transaction
+account state also requires `leverage`. Server error fields are untrusted data.
+
+Transport behavior is shared with ticks: reconnects are opt-in and lifetime-bounded,
+gaps precede retries, HTTP/TLS/protocol failures are terminal, and cancellation and
+client closure release sockets. The default message cap is 64 KiB, including the
+initial snapshot; explicitly increase it up to 16 MiB for larger accounts. There
+is no snapshot-arrival timeout beyond the caller's stream deadline and heartbeat.
+Other subscriptions (`account_state`, `instruments`, `hmr`) remain future work.
+Live Exness interoperability has not been verified.

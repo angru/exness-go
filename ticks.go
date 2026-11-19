@@ -74,29 +74,29 @@ func (e *StreamClosed) Error() string {
 	return fmt.Sprintf("Exness WebSocket closed with code %d", e.Code)
 }
 
-type tickSession struct{ cancel context.CancelFunc }
+type streamSession struct{ cancel context.CancelFunc }
 
-func (c *Client) beginTicks(ctx context.Context) (context.Context, func(), error) {
+func (c *Client) beginStream(ctx context.Context) (context.Context, func(), error) {
 	if ctx == nil {
 		return nil, nil, errors.New("invalid request context")
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	session := &tickSession{cancel: cancel}
+	session := &streamSession{cancel: cancel}
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
 		cancel()
 		return nil, nil, errors.New("Exness Client is closed")
 	}
-	if c.tickSessions == nil {
-		c.tickSessions = make(map[*tickSession]struct{})
+	if c.streamSessions == nil {
+		c.streamSessions = make(map[*streamSession]struct{})
 	}
-	c.tickSessions[session] = struct{}{}
+	c.streamSessions[session] = struct{}{}
 	c.mu.Unlock()
 	return ctx, func() {
 		cancel()
 		c.mu.Lock()
-		delete(c.tickSessions, session)
+		delete(c.streamSessions, session)
 		c.mu.Unlock()
 	}, nil
 }
@@ -106,18 +106,44 @@ func (c *Client) beginTicks(ctx context.Context) (context.Context, func(), error
 // performed. The instrument list is copied; each iteration gets a fresh budget.
 func (c *Client) StreamTicks(ctx context.Context, instruments []string, options TickStreamOptions) iter.Seq2[TickStreamEvent, error] {
 	instruments = slices.Clone(instruments)
+	subscribe := func(id string) ([]byte, error) {
+		data, _, err := tickSubscription(instruments, id)
+		return data, err
+	}
+	decoder := func(id string) func([]byte) (*Tick, error) {
+		names := make(map[string]bool, len(instruments))
+		for _, name := range instruments {
+			names[name] = true
+		}
+		return func(data []byte) (*Tick, error) { return decodeTick(data, names, id) }
+	}
 	return func(yield func(TickStreamEvent, error) bool) {
-		fail := func(err error) { yield(TickStreamEvent{}, err) }
+		for message, err := range streamMessages(c, ctx, "ticks", options, subscribe, decoder) {
+			if !yield(TickStreamEvent{Tick: message.Value, Gap: message.Gap}, err) {
+				return
+			}
+		}
+	}
+}
+
+type streamMessage[T any] struct {
+	Value *T
+	Gap   *TickStreamGap
+}
+
+func streamMessages[T any](c *Client, ctx context.Context, endpoint string, options TickStreamOptions, subscribe func(string) ([]byte, error), decoderFactory func(string) func([]byte) (*T, error)) iter.Seq2[streamMessage[T], error] {
+	return func(yield func(streamMessage[T], error) bool) {
+		fail := func(err error) { yield(streamMessage[T]{}, err) }
 		options, err := options.normalized()
 		if err != nil {
 			fail(err)
 			return
 		}
-		if _, _, err := tickSubscription(instruments, "validation"); err != nil {
+		if _, err := subscribe("validation"); err != nil {
 			fail(err)
 			return
 		}
-		ctx, finish, err := c.beginTicks(ctx)
+		ctx, finish, err := c.beginStream(ctx)
 		if err != nil {
 			fail(err)
 			return
@@ -125,7 +151,7 @@ func (c *Client) StreamTicks(ctx context.Context, instruments []string, options 
 		defer finish()
 		delay := options.ReconnectDelay
 		attempts := 0
-		path := "/v1/server-events/accounts/" + c.accountID + "/ws/ticks"
+		path := "/v1/server-events/accounts/" + c.accountID + "/ws/" + endpoint
 		for {
 			if err := ctx.Err(); err != nil {
 				fail(&TransportError{cause: err})
@@ -142,7 +168,7 @@ func (c *Client) StreamTicks(ctx context.Context, instruments []string, options 
 				return
 			}
 			requestID := hex.EncodeToString(nonce[:])
-			data, names, err := tickSubscription(instruments, requestID)
+			data, err := subscribe(requestID)
 			if err != nil {
 				fail(err)
 				return
@@ -151,7 +177,7 @@ func (c *Client) StreamTicks(ctx context.Context, instruments []string, options 
 				fail(errors.New("subscription exceeds MaxMessageBytes"))
 				return
 			}
-			connected, stopped, err := c.tickConnection(ctx, host+path, path, data, names, requestID, options, yield)
+			connected, stopped, err := streamConnection(c, ctx, host+path, path, data, decoderFactory(requestID), options, yield)
 			if stopped {
 				return
 			}
@@ -184,7 +210,7 @@ func (c *Client) StreamTicks(ctx context.Context, instruments []string, options 
 				return
 			}
 			if attempts >= options.MaxReconnects {
-				fail(&TransportError{cause: fmt.Errorf("tick reconnect budget exhausted: %w", err)})
+				fail(&TransportError{cause: fmt.Errorf("WebSocket reconnect budget exhausted: %w", err)})
 				return
 			}
 			attempts++
@@ -196,7 +222,7 @@ func (c *Client) StreamTicks(ctx context.Context, instruments []string, options 
 				}
 				closeCode = &value
 			}
-			if !yield(TickStreamEvent{Gap: &TickStreamGap{attempts, delay, closeCode}}, nil) {
+			if !yield(streamMessage[T]{Gap: &TickStreamGap{attempts, delay, closeCode}}, nil) {
 				return
 			}
 			timer := time.NewTimer(delay)
@@ -233,7 +259,7 @@ func transientTickError(err error) bool {
 	return errors.As(err, &network) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed)
 }
 
-func (c *Client) tickConnection(ctx context.Context, url, path string, subscription []byte, names map[string]bool, requestID string, options TickStreamOptions, yield func(TickStreamEvent, error) bool) (connected, stopped bool, err error) {
+func streamConnection[T any](c *Client, ctx context.Context, url, path string, subscription []byte, decode func([]byte) (*T, error), options TickStreamOptions, yield func(streamMessage[T], error) bool) (connected, stopped bool, err error) {
 	// coder/websocket converts this Timeout to a handshake-only context, clearing
 	// http.Client.Timeout before the upgrade. It is not a tick inactivity timeout.
 	httpClient := &http.Client{Transport: c.http.Transport, Timeout: options.OpenTimeout, CheckRedirect: c.http.CheckRedirect}
@@ -276,11 +302,11 @@ func (c *Client) tickConnection(ctx context.Context, url, path string, subscript
 		if err != nil {
 			return true, false, err
 		}
-		tick, err := decodeTick(data, names, requestID)
+		value, err := decode(data)
 		if err != nil {
 			return true, false, err
 		}
-		if !yield(TickStreamEvent{Tick: tick}, nil) {
+		if !yield(streamMessage[T]{Value: value}, nil) {
 			return true, true, nil
 		}
 	}

@@ -33,8 +33,15 @@ or adding Go runtime/build dependencies. See README.md for invocation details.
   bounded reconnects, explicit gap events and fresh subscriptions on reconnect.
 - Synthetic TLS tests cover disconnects, slow consumers, malformed messages,
   heartbeat, redirects, untrusted certificates, size limits and handshake deadlines.
-- The next streaming milestone is trading events, with an explicit state-recovery
-  design for gaps; ticks cannot replay missed data.
+
+## Completed: transactions stream
+
+- Typed transaction deltas and snapshots share the existing signed WebSocket transport.
+- Every connection requires a new snapshot before transactions. Gap events invalidate
+  caller-owned caches; fresh snapshots replace them. There is no implicit replay.
+- Shared Python fixtures and local TLS tests cover partial closes, balance changes,
+  rejected results, reconnection boundaries and cancellation.
+- Next: account/instrument/HMR subscriptions and their specific recovery semantics.
 
 ## Release gates
 

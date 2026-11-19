@@ -8,8 +8,10 @@ Russian user replies. This project owns its Git history. Go 1.26+.
 - Use official public API contracts; provenance is in README.md.
 - Prefer the standard library. `github.com/coder/websocket` is approved for the
   WebSocket transport; keep other dependencies minimal. Keep monetary values exact.
-- Tick reconnects must be opt-in, bounded and visible as gap events. Never forward
+- WebSocket reconnects must be opt-in, bounded and visible as gap events. Never forward
   signed headers across redirects or log them. Context cancellation must propagate.
+- Transactions require a fresh snapshot on every connection; processing rejections
+  are data events, and gaps invalidate caller-owned caches.
 - Check `gofmt -l .`, `go vet ./...`, `go test -race -cover ./...`, `go build ./...`.
 - Network tests bind loopback TLS sockets; no live account is used. Keep fuzz
   targets bounded and deterministic; run changed targets with a finite `-fuzztime`.

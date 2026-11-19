@@ -51,16 +51,16 @@ type Config struct {
 
 // Client is safe for concurrent use. Close prevents new operations; in-flight calls may finish.
 type Client struct {
-	credentials   Credentials
-	accountID     string
-	discoveryURL  string
-	http          *http.Client
-	mu            sync.Mutex
-	discoveryGate chan struct{}
-	accessPoint   string
-	closed        bool
-	clock         func() time.Time
-	tickSessions  map[*tickSession]struct{}
+	credentials    Credentials
+	accountID      string
+	discoveryURL   string
+	http           *http.Client
+	mu             sync.Mutex
+	discoveryGate  chan struct{}
+	accessPoint    string
+	closed         bool
+	clock          func() time.Time
+	streamSessions map[*streamSession]struct{}
 }
 
 var accountPattern = regexp.MustCompile(`^[1-9][0-9]{0,19}$`)
@@ -118,7 +118,7 @@ func NewClient(config Config) (*Client, error) {
 func (c *Client) Close() {
 	c.mu.Lock()
 	c.closed = true
-	for session := range c.tickSessions {
+	for session := range c.streamSessions {
 		session.cancel()
 	}
 	c.mu.Unlock()

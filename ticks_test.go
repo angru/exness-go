@@ -27,6 +27,11 @@ func tickContext(t *testing.T) context.Context {
 
 func tickTestClient(t *testing.T, handler func(context.Context, *websocket.Conn, string)) *Client {
 	t.Helper()
+	return streamTestClient(t, "ticks", handler)
+}
+
+func streamTestClient(t *testing.T, endpoint string, handler func(context.Context, *websocket.Conn, string)) *Client {
+	t.Helper()
 	ctx := tickContext(t)
 	var mu sync.Mutex
 	var requests []*http.Request
@@ -40,8 +45,8 @@ func tickTestClient(t *testing.T, handler func(context.Context, *websocket.Conn,
 			_ = json.NewEncoder(w).Encode(map[string]string{"access_point": "https://" + r.Host, "account_id": "123456"})
 			return
 		}
-		if r.URL.Path != "/v1/server-events/accounts/123456/ws/ticks" {
-			t.Errorf("wrong tick path %s", r.URL.Path)
+		if r.URL.Path != "/v1/server-events/accounts/123456/ws/"+endpoint {
+			t.Errorf("wrong stream path %s", r.URL.Path)
 			return
 		}
 		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{CompressionMode: websocket.CompressionDisabled})
@@ -61,7 +66,13 @@ func tickTestClient(t *testing.T, handler func(context.Context, *websocket.Conn,
 				Instruments []string `json:"instruments"`
 			} `json:"subscribe"`
 		}
-		if json.Unmarshal(data, &payload) != nil || payload.ID == "" || payload.Subscribe.Event != "ticks" || len(payload.Subscribe.Instruments) != 1 || payload.Subscribe.Instruments[0] != "EURUSD" {
+		validSubscription := json.Unmarshal(data, &payload) == nil && payload.ID != ""
+		if endpoint == "ticks" {
+			validSubscription = validSubscription && payload.Subscribe.Event == "ticks" && len(payload.Subscribe.Instruments) == 1 && payload.Subscribe.Instruments[0] == "EURUSD"
+		} else {
+			validSubscription = validSubscription && payload.Subscribe.Event == "transactions" && len(payload.Subscribe.Instruments) == 0
+		}
+		if !validSubscription {
 			t.Error("invalid tick subscription")
 			return
 		}
