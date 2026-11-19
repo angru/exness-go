@@ -4,9 +4,10 @@ Unofficial, read-only Go SDK for the public Exness Trading API (contract 1.0.2).
 Initial alpha; no tagged release yet and not verified against a live account.
 Go **1.26+**, standard library only; no third-party module dependencies.
 
-Supports signed Gateway discovery, account details, instrument names, trading
-snapshot, API limits, and paginated orders/deals history. WebSocket, candles,
-instrument conditions and trading mutations are follow-up work.
+Supports signed Gateway discovery, account details, instrument names and conditions,
+trading snapshot, API limits, paginated orders/deals history, candle history and
+existing operation status. All nine read-only REST operations in the pinned
+contract are covered, plus discovery. WebSocket and trading mutations are follow-up work.
 
 ## Installation
 
@@ -67,6 +68,49 @@ preserve opaque tokens and stop on repeated/inconsistent cursors. Breaking the
 loop prevents the next page request. Earlier rows may have been yielded before an
 error. Choose a time window within the current `GetLimits` history constraints.
 
+## Candles, conditions and operation status
+
+```go
+conditions, err := client.GetInstrumentConditions(ctx, "EURUSD")
+if err != nil { return err }
+fmt.Println(conditions.PointDigits, conditions.VolumeStep)
+
+count := 10
+candles, err := client.GetCandleHistory(ctx, exness.CandleQuery{
+    Instrument: "EURUSD", Timeframe: exness.TimeframeM1, From: start,
+    Count: &count, PriceType: exness.PriceBoth,
+})
+if err != nil { return err }
+for _, candle := range candles.Candles {
+    fmt.Println(candle.Time, candle.Bid, candle.Ask)
+}
+
+// Read an operation ID you already have. This does not submit a trade.
+operation, err := client.GetOperationStatus(ctx, "789")
+if err != nil { return err }
+fmt.Println(operation.Status, operation.IsTerminal())
+```
+
+Candles require `From` and exactly one of `To` (exclusive) or a nonzero `Count`.
+Negative counts are valid. Empty `PriceType` defaults to bid; ask and both are also
+supported. Timeframes: S1, S5, S15, M1, M3, M5, M10, M15, M30, H1, H2, H4, D1, W1, MN.
+Current count/range caps come from `GetLimits` and are enforced by the server;
+the method makes no hidden limits request and does not split, sort or retry.
+
+Candle OHLC and volume are JSON doubles, exposed as `*float64` to distinguish zero
+from missing data. Bid/ask-only responses use flat OHLC; both-side responses use
+nested `Bid` and `Ask`. The upstream oneOf is ambiguous because both branches have
+only optional fields and allow extra fields. The SDK preserves both shapes; Python
+contract tests document the defect and validate a request-selected branch without
+modifying the vendored YAML. See the [contract notes](https://github.com/angru/exness-python/blob/main/contracts/README.md#candle-schema-ambiguity).
+
+Conditions retain exact `Decimal` volume, swap and commission fields. Optional
+settings remain nil. Operation status is read once without polling; pending,
+confirmed, rejected and failed are recognized. `IsTerminal` means processing ended,
+not success. Rejection/failure codes remain model fields; HTTP failures return
+`APIError`. Run `go run ./examples/read-market` for a complete example with optional
+`EXN_INSTRUMENT` and `EXN_OPERATION_ID` environment inputs.
+
 ## Data and error semantics
 
 - Money, prices and volumes use `Decimal`, retaining the exact wire string.
@@ -79,8 +123,11 @@ error. Choose a time window within the current `GetLimits` history constraints.
 - `encoding/json` checks field types; the client also checks essential required
   data such as account identity, balances and history entities. This is not a full
   runtime JSON Schema validator. Unlike Python's Pydantic models, unknown response
-  fields are discarded and unknown response enum strings are retained. Request
-  filter enums are validated before network calls.
+  fields are discarded and unknown instrument/trading enum strings are retained.
+  Operation states are checked against pending/confirmed/rejected/failed. Request
+  filter enums are validated before network calls. Dot-only instrument path names
+  are rejected to prevent URL normalization; operation IDs use uint64 syntax and
+  numeric identity comparison, allowing leading zeros.
 - All requests take a `context.Context`. Default total HTTP timeout: 15 seconds;
   override with `Config.Timeout`. Responses are limited to 16 MiB.
 - `Client` supports concurrent calls and serializes cached discovery. Explicit
