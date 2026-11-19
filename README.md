@@ -183,6 +183,25 @@ Retrieved 2026-11-19 (Asia/Nicosia):
 - [Discovery](https://www.exness-api.com/trading/get-started/access-point-host-discovery).
 - [Key loading and signing examples](https://www.exness-api.com/trading/guides/code-examples).
 
+For contract maintenance, use the shared checker from a separate Python SDK checkout:
+
+```sh
+cd /path/to/exness-python
+uv sync --locked
+uv run python -m tools.check_contract
+# Offline candidate review:
+uv run python -m tools.check_contract --candidate /path/to/candidate.yaml
+```
+
+It reports operations, parameters and model changes without updating the snapshot.
+Exit codes: 0 unchanged, 1 review required, 2 check failed. The Python repository
+also provides a manually triggered Contract review workflow with downloadable
+JSON reports and candidate YAML. See the [maintenance instructions](https://github.com/angru/exness-python/blob/main/contracts/README.md#checking-for-upstream-changes).
+This is development tooling, not a Go dependency. Review shared-schema changes
+in both SDKs, keep synthetic fixtures aligned, and update the provenance hash here
+only after explicitly adopting a reviewed snapshot. Structural differences are
+not automatically classified as breaking or compatible.
+
 This is not an official Exness product or a MetaTrader wrapper.
 
 See [ROADMAP.md](ROADMAP.md) for planned work without a live account. SDK code is

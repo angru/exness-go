@@ -2,6 +2,8 @@
 
 ## Unreleased — 2026-11-19
 
+- Document the shared OpenAPI checker and explicit snapshot-review workflow;
+  Go runtime code and dependencies are unchanged.
 - Fix discovery concurrency: queued callers honor context cancellation/deadlines,
   and `Close` no longer waits for a discovery network call. Cached reads may
   continue while an explicit refresh runs.

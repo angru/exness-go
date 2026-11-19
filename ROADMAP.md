@@ -20,6 +20,12 @@ network calls. The upstream candle oneOf ambiguity is documented in README.md.
 - Continue reviewing contract changes and cross-language compatibility explicitly
   before updating models and fixtures.
 
+## Completed: contract maintenance
+
+Contract maintenance now uses the Python repository's explicit checker and manual
+review workflow; it reports drift for both SDKs without changing their snapshots
+or adding Go runtime/build dependencies. See README.md for invocation details.
+
 ## Streaming
 
 - Start with ticks, then trading events.
