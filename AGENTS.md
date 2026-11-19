@@ -12,6 +12,8 @@ Russian user replies. This project owns its Git history. Go 1.26+.
   signed headers across redirects or log them. Context cancellation must propagate.
 - Transactions require a fresh snapshot on every connection; processing rejections
   are data events, and gaps invalidate caller-owned caches.
+- HMR requires a fresh snapshot before updates on every connection. Preserve
+  schedule strings; account/instrument streams do not promise initial snapshots.
 - Check `gofmt -l .`, `go vet ./...`, `go test -race -cover ./...`, `go build ./...`.
 - Network tests bind loopback TLS sockets; no live account is used. Keep fuzz
   targets bounded and deterministic; run changed targets with a finite `-fuzztime`.

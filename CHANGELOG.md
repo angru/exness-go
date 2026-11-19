@@ -2,6 +2,13 @@
 
 ## Unreleased — 2026-11-19
 
+- Add typed account-state, instrument and HMR streams over the existing signed
+  transport, with copied/validated selections and opt-in reconnect gaps.
+- Require fresh HMR snapshots on each connection, preserve schedule strings and
+  distinguish full instrument lifecycle updates from HMR incremental changes.
+- Add shared Python fixtures, local TLS recovery/cleanup tests, a read-events
+  example and explicit cache recovery guidance. Live interoperability is unverified.
+
 - Add signed transactions streaming with typed snapshot/delta/result models and
   a fresh-snapshot requirement on every connection. Share the tick transport and
   its bounded reconnects, gap reporting and cancellation behavior.

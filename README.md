@@ -8,8 +8,8 @@ Go **1.26+**. WebSocket transport uses [coder/websocket](https://github.com/code
 Supports signed Gateway discovery, account details, instrument names and conditions,
 trading snapshot, API limits, paginated orders/deals history, candle history and
 existing operation status. All nine read-only REST operations in the pinned
-contract are covered, plus discovery, live WebSocket ticks and transaction events. Trading mutations
-and account/instrument/HMR streams are follow-up work.
+contract are covered, plus discovery, live WebSocket ticks, transactions and account/instrument/HMR
+events. Trading mutations remain future work.
 
 ## Installation
 
@@ -333,5 +333,83 @@ gaps precede retries, HTTP/TLS/protocol failures are terminal, and cancellation 
 client closure release sockets. The default message cap is 64 KiB, including the
 initial snapshot; explicitly increase it up to 16 MiB for larger accounts. There
 is no snapshot-arrival timeout beyond the caller's stream deadline and heartbeat.
-Other subscriptions (`account_state`, `instruments`, `hmr`) remain future work.
+Other server subscriptions are documented below.
 Live Exness interoperability has not been verified.
+
+## Account, instrument and HMR events
+
+```go
+for event, err := range client.StreamHMR(ctx, []string{"EURUSD"}, exness.ServerStreamOptions{
+    MaxReconnects: 3,
+}) {
+    if err != nil { return err }
+    switch {
+    case event.Gap != nil:
+        fmt.Println("HMR state is stale")
+    case event.Snapshot != nil:
+        fmt.Println("Replace baseline", len(event.Snapshot.Periods))
+    case event.Update != nil:
+        fmt.Println("Changes", event.Update.UpsertedPeriods, event.Update.RemovedPeriodIDs)
+    }
+}
+```
+
+`StreamAccountState(ctx, options)` yields `AccountStateStreamEvent` with either
+`AccountState` or `Gap`. `StreamInstruments(ctx, names, options)` yields
+`InstrumentStreamEvent` with either `Instrument` or `Gap`. `StreamHMR` yields
+`HmrStreamEvent` with exactly one `Snapshot`, `Update` or `Gap` on success.
+`ServerStreamOptions` and `ServerStreamGap` alias the tick equivalents. Break or
+cancel the context to close a stream. Run an example with the four `EXN_*`
+variables already configured:
+
+```sh
+EXN_STREAM=account_state go run ./examples/read-events
+EXN_STREAM=instruments EXN_INSTRUMENTS=all go run ./examples/read-events
+EXN_STREAM=hmr EXN_INSTRUMENTS=EURUSD,XAUUSD go run ./examples/read-events
+```
+
+Each call opens a dedicated `/ws/events` connection with one subscription and a
+fresh request ID. Multiple concurrent calls consume multiple server connections;
+check `GetLimits` / `get_limits` when choosing concurrency. These methods do not
+multiplex subscriptions or change instrument lists mid-connection. Close the
+iterator to unsubscribe by closing its connection; open a new stream to change
+selection. Reconnects reuse the copied selection and the existing signed transport.
+Options and gap types alias their tick equivalents; retries remain disabled by
+default, bounded when enabled, and preceded by visible gaps. Message/queue limits,
+heartbeat, redirect refusal and cancellation rules are unchanged.
+
+| Subscription | Events | Initial state and recovery |
+| --- | --- | --- |
+| `account_state` | `AccountStateEvent` | No initial snapshot. Each event is a fresh floating-state observation; a gap makes the prior observation stale until the next event. |
+| `instruments` | `InstrumentEvent`, action `new`, `upd`, `del` | No initial snapshot. `new`/`upd` contain full conditions; `del` removes the instrument from a cache. Missed changes or deletions require explicit reconciliation. |
+| `hmr` | `HmrSnapshot`, `HmrUpdate` | A fresh snapshot is mandatory before updates on every connection. Every snapshot, even empty, replaces the entire baseline. |
+
+Instrument subscriptions require a nonempty explicit list or exactly `["all"]`.
+HMR requires explicit instruments and rejects `all`. Duplicate or malformed names
+fail before networking; account availability is checked by the server, without a
+hidden REST lookup. Unsubscribed instrument events and unknown/wrong event kinds
+are terminal protocol errors. Lists are copied when constructing the iterator.
+
+An account-state event contains exact balance, equity and used-margin values. It
+is an observation, not a transaction history or a substitute for `transactions`.
+The SDK does not assume a fixed delivery interval or generate synthetic values.
+For instrument caches, treat a gap or termination as loss of continuity. Explicitly
+refresh the available instrument list and conditions through REST when needed;
+that REST fetch and concurrent WebSocket delivery are **not an atomic snapshot**.
+The SDK does not silently merge a REST result with events or mark the entire cache
+current merely because one instrument received an update.
+
+HMR arrays live at the event top level, without `payload` or `event_time`.
+Snapshots contain `periods`; updates contain `upserted_periods` and
+`removed_period_ids`, both required even when empty. Applications maintain their
+own map keyed by `period_id`: replace it on a snapshot, upsert changed periods and
+remove the listed IDs on updates. Removing an unknown ID is harmless. A gap or
+termination invalidates the baseline; the SDK refuses an update before the new
+snapshot. It yields data without automatic merging, sorting, replay or deduplication.
+
+A period preserves the server's complete `instruments` list (not filtered locally)
+and string leverage. `regular` schedule strings use calendar dates, while `periodic`
+strings use weekly schedules such as `Mon, 13:00:00`. Both are preserved verbatim;
+no timezone, recurrence calculation or "active now" flag is inferred. All synthetic
+fixtures are shared across SDKs and checked against the pinned OpenAPI. Live Exness
+interoperability remains unverified.

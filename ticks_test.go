@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -31,6 +32,15 @@ func tickTestClient(t *testing.T, handler func(context.Context, *websocket.Conn,
 }
 
 func streamTestClient(t *testing.T, endpoint string, handler func(context.Context, *websocket.Conn, string)) *Client {
+	t.Helper()
+	event, names := "transactions", []string(nil)
+	if endpoint == "ticks" {
+		event, names = "ticks", []string{"EURUSD"}
+	}
+	return subscriptionTestClient(t, endpoint, event, names, handler)
+}
+
+func subscriptionTestClient(t *testing.T, endpoint, event string, names []string, handler func(context.Context, *websocket.Conn, string)) *Client {
 	t.Helper()
 	ctx := tickContext(t)
 	var mu sync.Mutex
@@ -67,13 +77,9 @@ func streamTestClient(t *testing.T, endpoint string, handler func(context.Contex
 			} `json:"subscribe"`
 		}
 		validSubscription := json.Unmarshal(data, &payload) == nil && payload.ID != ""
-		if endpoint == "ticks" {
-			validSubscription = validSubscription && payload.Subscribe.Event == "ticks" && len(payload.Subscribe.Instruments) == 1 && payload.Subscribe.Instruments[0] == "EURUSD"
-		} else {
-			validSubscription = validSubscription && payload.Subscribe.Event == "transactions" && len(payload.Subscribe.Instruments) == 0
-		}
+		validSubscription = validSubscription && payload.Subscribe.Event == event && slices.Equal(payload.Subscribe.Instruments, names)
 		if !validSubscription {
-			t.Error("invalid tick subscription")
+			t.Error("invalid stream subscription")
 			return
 		}
 		handler(ctx, conn, payload.ID)
