@@ -2,10 +2,16 @@
 
 ## Unreleased — 2026-11-19
 
-- Add tick/error wire models and shared tick/subscription/error fixtures with
-  validation tests. WebSocket connection transport is not implemented yet.
+- Add signed live tick streams using coder/websocket v1.8.15, with optional
+  bounded reconnects, exponential backoff and explicit gap events. Cancellation,
+  early iteration exit and client closure release active sockets.
+- Add heartbeat, handshake deadlines, message limits and terminal error handling
+  for HTTP, TLS, protocol and subscription failures. Redirects stay disabled.
+- Share tick/error/subscription fixtures with Python and add synthetic TLS tests
+  for signatures, reconnects, cancellation, slow readers, ping/pong and failures.
+- Add a runnable read-ticks example and document stream/backpressure semantics.
 - Document the shared OpenAPI checker and explicit snapshot-review workflow;
-  Go runtime code and dependencies are unchanged.
+  the checker adds no Go runtime dependencies.
 - Fix discovery concurrency: queued callers honor context cancellation/deadlines,
   and `Close` no longer waits for a discovery network call. Cached reads may
   continue while an explicit refresh runs.

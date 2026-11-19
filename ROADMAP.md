@@ -26,15 +26,15 @@ Contract maintenance now uses the Python repository's explicit checker and manua
 review workflow; it reports drift for both SDKs without changing their snapshots
 or adding Go runtime/build dependencies. See README.md for invocation details.
 
-## Streaming
+## Completed: live tick transport
 
-- Tick wire models, subscription validation and shared Python fixtures are ready.
-- WebSocket connection transport remains pending the dependency policy decision;
-  the Go SDK does not yet expose a live tick stream.
-- Start with ticks, then trading events.
-- Design cancellation, backpressure, bounded reconnects, subscription replay and
-  gap reporting before choosing a WebSocket dependency.
-- Test fake-server disconnects, slow consumers and malformed messages.
+- Signed WebSocket connections use coder/websocket, the approved transport dependency.
+- Pull-based tick iteration supports context cancellation and client closure, opt-in
+  bounded reconnects, explicit gap events and fresh subscriptions on reconnect.
+- Synthetic TLS tests cover disconnects, slow consumers, malformed messages,
+  heartbeat, redirects, untrusted certificates, size limits and handshake deadlines.
+- The next streaming milestone is trading events, with an explicit state-recovery
+  design for gaps; ticks cannot replay missed data.
 
 ## Release gates
 

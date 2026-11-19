@@ -60,6 +60,7 @@ type Client struct {
 	accessPoint   string
 	closed        bool
 	clock         func() time.Time
+	tickSessions  map[*tickSession]struct{}
 }
 
 var accountPattern = regexp.MustCompile(`^[1-9][0-9]{0,19}$`)
@@ -117,6 +118,9 @@ func NewClient(config Config) (*Client, error) {
 func (c *Client) Close() {
 	c.mu.Lock()
 	c.closed = true
+	for session := range c.tickSessions {
+		session.cancel()
+	}
 	c.mu.Unlock()
 	c.http.CloseIdleConnections()
 }

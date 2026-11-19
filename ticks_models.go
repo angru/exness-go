@@ -8,7 +8,7 @@ import (
 )
 
 // Tick contains market-data doubles, not monetary Decimal values. Optional fields
-// remain nil. The stream consumer must check Instrument against its subscription.
+// remain nil. StreamTicks checks Instrument against its subscription.
 type Tick struct {
 	Instrument *string    `json:"instrument,omitempty"`
 	Bid        *float64   `json:"bid,omitempty"`

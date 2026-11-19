@@ -2,12 +2,14 @@
 
 Unofficial, read-only Go SDK for the public Exness Trading API (contract 1.0.2).
 Initial alpha; no tagged release yet and not verified against a live account.
-Go **1.26+**, standard library only; no third-party module dependencies.
+Go **1.26+**. WebSocket transport uses [coder/websocket](https://github.com/coder/websocket)
+(v1.8.15); REST and signing use the standard library.
 
 Supports signed Gateway discovery, account details, instrument names and conditions,
 trading snapshot, API limits, paginated orders/deals history, candle history and
 existing operation status. All nine read-only REST operations in the pinned
-contract are covered, plus discovery. WebSocket and trading mutations are follow-up work.
+contract are covered, plus discovery and live WebSocket ticks. Trading mutations
+and trading-event streams are follow-up work.
 
 ## Installation
 
@@ -113,7 +115,7 @@ not success. Rejection/failure codes remain model fields; HTTP failures return
 
 ## Data and error semantics
 
-- Money, prices and volumes use `Decimal`, retaining the exact wire string.
+- String-encoded money, prices and volumes use `Decimal`, retaining the exact wire string.
   `String()` returns it; `Rat()` converts to `math/big.Rat` for exact arithmetic.
   Numbers, scientific notation, NaN and null are rejected in required decimal
   fields. Optional decimals use pointers and accept null. An unset `Decimal` is
@@ -128,15 +130,17 @@ not success. Rejection/failure codes remain model fields; HTTP failures return
   filter enums are validated before network calls. Dot-only instrument path names
   are rejected to prevent URL normalization; operation IDs use uint64 syntax and
   numeric identity comparison, allowing leading zeros.
-- All requests take a `context.Context`. Default total HTTP timeout: 15 seconds;
-  override with `Config.Timeout`. Responses are limited to 16 MiB.
+- All requests take a `context.Context`. Default total REST timeout: 15 seconds;
+  override with `Config.Timeout`. REST responses are limited to 16 MiB. Tick streams
+  have a separate handshake timeout and message limit, described below.
 - `Client` supports concurrent calls and serializes cached discovery. Explicit
   `Discover(ctx, true)` refreshes the host. Callers waiting for discovery honor
   their own context; cached reads can continue while an explicit refresh runs.
   `Close` does not wait for discovery, closes idle connections and
-  prevents new operations; in-flight calls can finish. Custom transports must be
+  prevents new operations. In-flight REST calls can finish; active tick streams
+  are canceled, including their discovery and reconnect waits. Custom transports must be
   safe for concurrent use. Environment proxies are ignored by the default transport.
-- No SDK retry loop is installed; HTTP errors including 429 are returned directly.
+- REST calls have no SDK retry loop; HTTP errors including 429 are returned directly.
   The Go HTTP transport may recover stale pooled connections for safe GETs.
 - Use `errors.As` for `*APIError`, `*ProtocolError`, `*TransportError`.
   `APIError` exposes status, optional numeric code/message and raw Retry-After.
@@ -204,13 +208,74 @@ not automatically classified as breaking or compatible.
 
 This is not an official Exness product or a MetaTrader wrapper.
 
-## Tick protocol groundwork
+## Live ticks
 
-`Tick` models the pinned `WSTick` payload with optional numeric bid/ask and timestamp
-fields. Tick, subscription and WebSocket error fixtures are shared with Python and
-validated offline. The Python asyncio SDK now provides a live tick stream.
-This Go module does not yet establish WebSocket connections; choosing its transport
-must preserve or explicitly revise the repository's standard-library-only policy.
+```go
+for event, err := range client.StreamTicks(ctx, []string{"EURUSD"}, exness.TickStreamOptions{
+    MaxReconnects: 3, // Opt in; the default is no reconnects.
+}) {
+    if err != nil { return err }
+    if event.Gap != nil {
+        fmt.Printf("possible tick loss; reconnect %d in %s\n",
+            event.Gap.ReconnectAttempt, event.Gap.Delay)
+        continue
+    }
+    if event.Tick.Bid != nil {
+        fmt.Println(*event.Tick.Instrument, *event.Tick.Bid)
+    }
+}
+```
+
+Run `go run ./examples/read-ticks` with the same four `EXN_*` variables and optional
+`EXN_INSTRUMENT` (default `EURUSD`). Ctrl-C cancels the stream. The SDK discovers the
+account host, signs the exact WebSocket GET path and subscribes with a fresh request
+ID on every connection. Instrument lists are copied when `StreamTicks` is called;
+validation and networking are lazy, beginning when the iterator is consumed.
+
+`Tick` follows the pinned `WSTick` schema: instrument is required by the SDK and
+must belong to the subscription; bid, ask and timestamp are optional. Prices are
+JSON doubles (`*float64`), as with candle OHLC, rather than string decimals. Tick,
+subscription and error fixtures are shared with Python. Unknown fields are ignored.
+A terminal failure yields one error and ends iteration; earlier ticks remain valid.
+
+- Reconnects are disabled by default. `MaxReconnects` accepts 0–1000 and applies
+  across the whole iteration, including successful connections. It never resets
+  when a tick arrives. Backoff starts at one second and doubles up to 30 seconds;
+  customize `ReconnectDelay` and `MaxReconnectDelay` to positive durations.
+- A `Gap` is yielded **before** every retry delay. It contains the attempt, delay
+  and optional close code (nil when no connection was established). It signals
+  possible loss, not a count of missed ticks. There is no replay, sorting or
+  deduplication. Reconnects resubscribe using cached discovery; no hidden host refresh.
+- Network failures and close codes 1001, 1006, 1011 and 1012 may reconnect within
+  the budget. A normal 1000 close ends successfully. Other close codes, protocol
+  errors, subscription errors, TLS validation errors and all HTTP handshake
+  failures (including 429 and 503) are terminal. Discovery failures are not retried.
+- `OpenTimeout` defaults to 15 seconds and applies only to each handshake.
+  The caller context bounds the stream lifetime. There is no tick inactivity timeout.
+  Pings run every 20 seconds with a 20-second pong deadline.
+- Reading is driven by iteration, with transport backpressure and no SDK tick queue.
+  Keep the loop responsive: pong processing also needs reads, so a stalled consumer
+  may lose its connection. This differs from Python's bounded background frame queue.
+- `MaxMessageBytes` defaults to 64 KiB and accepts 1 byte through 16 MiB, applying
+  to incoming messages and the outgoing subscription. Oversized incoming messages
+  end with `StreamClosed{Code: 1009}`. An oversized subscription fails before dialing.
+- Breaking iteration, canceling the context or calling `Client.Close` releases the
+  socket promptly. Local cleanup closes the socket without waiting for a peer close
+  handshake. Cancellation is inspectable with `errors.Is(err, context.Canceled)`.
+  Closing the client also releases sockets while consumer code is paused; it cannot
+  interrupt that consumer's own code.
+- Use `errors.As` for `*StreamClosed`, `*WebSocketAPIError`, `*APIError`,
+  `*ProtocolError` and `*TransportError`. Close reasons and subscription error text
+  are excluded from error strings. Do not indiscriminately log underlying causes
+  or server-provided error fields.
+
+Redirects and compression are disabled; signed headers are never forwarded across
+redirects. The default transport ignores environment proxies. `Config.Transport`
+is shared by REST and WebSocket requests; custom transports must support an HTTP/1.1
+upgrade with a writable response body (as `http.Transport` does). TLS settings come
+from that transport. Live Exness interoperability remains unverified; tests use local
+TLS servers for signatures, subscriptions, reconnection, cancellation, ping/pong,
+slow consumers, message limits, certificate validation and handshake deadlines.
 
 See [ROADMAP.md](ROADMAP.md) for planned work without a live account. SDK code is
 available under the [MIT license](LICENSE). The public RFC 8032 test key is
