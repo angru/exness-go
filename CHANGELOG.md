@@ -2,6 +2,8 @@
 
 ## Unreleased — 2026-11-19
 
+- Add tick/error wire models and shared tick/subscription/error fixtures with
+  validation tests. WebSocket connection transport is not implemented yet.
 - Document the shared OpenAPI checker and explicit snapshot-review workflow;
   Go runtime code and dependencies are unchanged.
 - Fix discovery concurrency: queued callers honor context cancellation/deadlines,

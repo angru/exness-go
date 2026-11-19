@@ -28,6 +28,9 @@ or adding Go runtime/build dependencies. See README.md for invocation details.
 
 ## Streaming
 
+- Tick wire models, subscription validation and shared Python fixtures are ready.
+- WebSocket connection transport remains pending the dependency policy decision;
+  the Go SDK does not yet expose a live tick stream.
 - Start with ticks, then trading events.
 - Design cancellation, backpressure, bounded reconnects, subscription replay and
   gap reporting before choosing a WebSocket dependency.

@@ -204,6 +204,14 @@ not automatically classified as breaking or compatible.
 
 This is not an official Exness product or a MetaTrader wrapper.
 
+## Tick protocol groundwork
+
+`Tick` models the pinned `WSTick` payload with optional numeric bid/ask and timestamp
+fields. Tick, subscription and WebSocket error fixtures are shared with Python and
+validated offline. The Python asyncio SDK now provides a live tick stream.
+This Go module does not yet establish WebSocket connections; choosing its transport
+must preserve or explicitly revise the repository's standard-library-only policy.
+
 See [ROADMAP.md](ROADMAP.md) for planned work without a live account. SDK code is
 available under the [MIT license](LICENSE). The public RFC 8032 test key is
 attributed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
