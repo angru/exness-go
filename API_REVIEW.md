@@ -167,3 +167,6 @@ see [CONSUMERS.md](CONSUMERS.md) for exact commands and limits.
 Shared fixture/behavior checks and bounded lifecycle stress remain separate gates
 ([PARITY.md](PARITY.md), [PERFORMANCE.md](PERFORMANCE.md)). These consumer checks
 verify the current local artifact/source revision, not a registry-published release.
+
+The pinned public compatibility gate and its struct literal, interface, and
+baseline update decisions are documented in [API_COMPATIBILITY.md](API_COMPATIBILITY.md).
