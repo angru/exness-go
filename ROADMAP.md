@@ -92,9 +92,13 @@ part of this plan.
 
 - [x] 1. [Response validation audit and shared regression corpus](https://github.com/angru/exness-go/issues/1).
 - [x] 2. [Decoder fuzzing and generated event sequences](https://github.com/angru/exness-go/issues/2).
-- [ ] 3. [Automated fixture and behavioral parity checks](https://github.com/angru/exness-go/issues/3).
+- [x] 3. [Automated fixture and behavioral parity checks](https://github.com/angru/exness-go/issues/3).
 - [ ] 4. [Local lifecycle stress and reproducible benchmarks](https://github.com/angru/exness-go/issues/4).
 - [ ] 5. [Installed-package checks and current public API documentation](https://github.com/angru/exness-go/issues/5).
+
+Cross-SDK comparison now covers 46 shared files, 170 decoder outcomes and 49
+recovery checkpoints, with a pinned-peer CI job in each repository. See
+[PARITY.md](PARITY.md) and the [implementation](https://github.com/angru/exness-go/commit/41b8dc0ffe9fef8c7721e3f0f536201bd2d35823).
 
 The first audit fixed uint64 overflow and related critical-field inconsistencies.
 See [RESPONSE_VALIDATION.md](RESPONSE_VALIDATION.md) for the implemented rules and
