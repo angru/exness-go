@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -69,8 +70,28 @@ type signedPayload struct {
 }
 
 func (c *Credentials) signGET(path string, now time.Time) http.Header {
-	hash := sha256.Sum256(nil)
-	payload := signedPayload{c.apiKey, "", now.UnixMilli(), 1, "GET", path, base64.RawURLEncoding.EncodeToString(hash[:])}
+	headers, _ := c.signRequest(http.MethodGet, path, nil, "", now)
+	return headers
+}
+
+var idempotencyPattern = regexp.MustCompile(`^[A-Za-z0-9._~-]{5,128}$`)
+
+// signRequest signs the final method, path/query and body bytes without serializing them.
+func (c *Credentials) signRequest(method, path string, body []byte, key string, now time.Time) (http.Header, error) {
+	switch method {
+	case http.MethodGet:
+		if len(body) != 0 || key != "" {
+			return nil, errors.New("signed GET requires an empty body and idempotency key")
+		}
+	case http.MethodPost, http.MethodPatch, http.MethodDelete:
+		if !idempotencyPattern.MatchString(key) {
+			return nil, errors.New("invalid idempotency key: expected 5..128 URL-safe ASCII characters")
+		}
+	default:
+		return nil, errors.New("unsupported signed HTTP method")
+	}
+	hash := sha256.Sum256(body)
+	payload := signedPayload{c.apiKey, key, now.UnixMilli(), 1, method, path, base64.RawURLEncoding.EncodeToString(hash[:])}
 	// These fields are all serializable primitives; encoding cannot fail.
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
@@ -79,10 +100,10 @@ func (c *Credentials) signGET(path string, now time.Time) http.Header {
 	data := bytes.TrimSuffix(buf.Bytes(), []byte{'\n'})
 	headers := make(http.Header)
 	headers.Set("EXN-API-KEY", c.apiKey)
-	headers.Set("EXN-IDEMPOTENCY-KEY", "")
+	headers.Set("EXN-IDEMPOTENCY-KEY", key)
 	headers.Set("EXN-TIMESTAMP", strconv.FormatInt(now.UnixMilli(), 10))
 	headers.Set("EXN-SIGN-VERSION", "1")
 	headers.Set("EXN-DATA", base64.RawURLEncoding.EncodeToString(data))
 	headers.Set("EXN-SIGN", base64.RawURLEncoding.EncodeToString(ed25519.Sign(c.privateKey, data)))
-	return headers
+	return headers, nil
 }

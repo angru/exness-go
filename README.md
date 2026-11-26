@@ -11,6 +11,16 @@ existing operation status. All nine read-only REST operations in the pinned
 contract are covered, plus discovery, live WebSocket ticks, transactions and account/instrument/HMR
 events. Trading mutations remain future work.
 
+## Trading support in development
+
+The next milestone is typed trading submission followed by explicit result tracking.
+The [implementation plan](TRADING_WRITES.md) defines five stages, the planned methods,
+idempotency rules, acknowledgement handling and recovery after an uncertain outcome.
+On `main`, stage 1 implements request encoding/signing, `OpenPositionRequest` and `AckResponse`.
+Client submission methods follow in stage 2. Stages 1–4 use offline tests;
+live interoperability is a separate final check. See [ROADMAP.md](ROADMAP.md) for status.
+These additions are not in the alpha 7 tag.
+
 ## Installation
 
 In your Go module:

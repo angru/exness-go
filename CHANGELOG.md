@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Document the staged trading-write plan and implement its first foundation:
+  validated opening-position/ACK models and exact-body mutation signing with
+  explicit idempotency keys. Client submission methods remain planned.
+- Share OpenSSL-generated POST/PATCH/DELETE signing vectors with Python and verify
+  signed method, path/query and body bytes over local TLS, including Unicode.
+
 ## v0.1.0-alpha.7 — 2026-11-19
 
 - Review and document the public API and cross-language lifecycle/validation limits.
