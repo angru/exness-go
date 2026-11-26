@@ -1,0 +1,10 @@
+package consumer
+
+import (
+    "context"
+    exness "github.com/angru/exness-go"
+)
+
+func invalid(client *exness.Client) {
+    client.OpenPosition(context.Background(), "not a request", "consumer-invalid")
+}

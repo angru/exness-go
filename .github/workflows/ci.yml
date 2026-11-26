@@ -67,3 +67,5 @@ jobs:
             go test -run '^$' -fuzz "^Fuzz${target}$" -fuzztime 5s -parallel 2 .
           done
       - run: go build ./...
+      - name: Verify independent module consumer and typing
+        run: sh tools/check-consumer.sh
