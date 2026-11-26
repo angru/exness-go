@@ -21,8 +21,8 @@ const packagePath = "github.com/angru/exness-go"
 const baselineRevision = "73e62179739ce2e28318f5916ce51b5e5fbeb99f"
 
 type listing struct {
-	Dir			string
-	GoFiles, CgoFiles	[]string
+	Dir               string
+	GoFiles, CgoFiles []string
 }
 
 func load(dir string, files []string, imp types.Importer) (*types.Package, error) {
