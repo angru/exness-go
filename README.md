@@ -48,8 +48,58 @@ server fields remain untrusted. Reconcile before deciding whether to retry.
 
 No implicit condition reads, polling, redirects or write retries are performed.
 The [implementation plan](TRADING_WRITES.md) documents error policy and remaining
-work. Stages 1–2 are verified offline; result tracking is next. Live interoperability
+work. Stages 1–3 are verified offline; application recovery examples are next. Live interoperability
 remains unverified.
+
+## Explicit result tracking on main
+
+Given an ACK and the persisted caller key, explicitly choose when to poll. Waiting
+performs GETs only and never starts as a side effect of submission.
+
+```go
+reference, err := exness.OperationReferenceFromAck(*ack, requestKey)
+if err != nil { return err }
+result, err := client.WaitOperation(ctx, reference, exness.OperationWaitOptions{
+    Timeout: 30 * time.Second,
+    PollInterval: time.Second,
+})
+if err != nil {
+    var expired *exness.OperationWaitTimeoutError
+    if errors.As(err, &expired) {
+        // Persist/reconcile expired.Reference and expired.LastStatus; do not resubmit.
+    }
+    return err
+}
+if result.Status == exness.OperationConfirmed {
+    // Finalized; reconcile the resulting account state.
+} else {
+    // Rejected/failed: inspect result.ErrorCode and result.ErrorMessage.
+}
+```
+
+The snippet uses `errors` and `time`. Zero options select a 30-second timeout and
+1-second poll interval; negative durations are invalid. The earlier of the caller's
+context deadline and wait timeout covers discovery, lock contention, requests and
+delays. Shorter HTTP timeouts remain effective. API/transport/protocol errors stop
+the wait, including 404 and 429. No retries follow errors. Wait expiry preserves the
+reference, last correlated status (possibly nil) and `Attempts` (status reads
+started, including discovery). It matches `context.DeadlineExceeded` through
+`errors.Is`; caller cancellation still matches `context.Canceled`.
+
+If the ACK lacks an operation ID, the reference still retains the caller key, but
+`WaitOperation` rejects it before networking. After an unknown outcome, construct
+`OperationReference{ClientRequestID: savedKey}` to match subsequent events.
+For a `TransactionEvent` from the **same account**, `reference.MatchesEvent(event)`
+checks identity only. Inspect `event.Status` separately: `success`, `rejected`,
+`failed`, or nil. Missing status does not prove completion. Use
+`reference.MatchesStatus(status)` for manually fetched REST status.
+
+Either identifier can establish a match; conflicting evidence in the other returns
+`ProtocolError`. Unrelated identities return false. Operation IDs compare
+numerically; caller keys compare exactly. Empty reference fields mean absent.
+The helpers do not consume streams or update caches. After a gap, obtain a fresh
+snapshot before applying deltas. A timeout or lost ACK never authorizes a new-key
+resubmission.
 
 ## Installation
 
