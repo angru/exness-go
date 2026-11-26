@@ -17,7 +17,7 @@ import (
 const testSeed = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
 const testPublic = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
 
-func readFixture(t *testing.T, name string) []byte {
+func readFixture(t testing.TB, name string) []byte {
 	t.Helper()
 	data, err := os.ReadFile("testdata/" + name + ".json")
 	if err != nil {
@@ -26,7 +26,7 @@ func readFixture(t *testing.T, name string) []byte {
 	return data
 }
 
-func testCredentials(t *testing.T) *Credentials {
+func testCredentials(t testing.TB) *Credentials {
 	t.Helper()
 	c, err := NewCredentials("exnsk-synthetic-test", testSeed+testPublic)
 	if err != nil {

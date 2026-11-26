@@ -22,7 +22,7 @@ jobs:
         if: matrix.go == '1.27.x'
         shell: bash
         run: |
-          for target in Decimal Credentials Origins CursorEncoding Pagination; do
+          for target in Decimal Credentials Origins CursorEncoding Pagination RESTResponses WebSocketMessages DecoderSequences; do
             go test -run '^$' -fuzz "^Fuzz${target}$" -fuzztime 5s -parallel 2 .
           done
       - run: go build ./...
