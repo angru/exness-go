@@ -48,7 +48,7 @@ server fields remain untrusted. Reconcile before deciding whether to retry.
 
 No implicit condition reads, polling, redirects or write retries are performed.
 The [implementation plan](TRADING_WRITES.md) documents error policy and remaining
-work. Stages 1–3 are verified offline; application recovery examples are next. Live interoperability
+work. Stages 1–4 are verified offline. Live interoperability
 remains unverified.
 
 ## Explicit result tracking on main
@@ -100,6 +100,21 @@ numerically; caller keys compare exactly. Empty reference fields mean absent.
 The helpers do not consume streams or update caches. After a gap, obtain a fresh
 snapshot before applying deltas. A timeout or lost ACK never authorizes a new-key
 resubmission.
+
+## Offline recovery example on main
+
+Run from the development checkout, without credentials or network access:
+
+```sh
+go run ./examples/recover-trading
+```
+
+The example checks eight shared scenarios and prints 49 JSON Lines checkpoints:
+snapshot replacement, partial/full closure, rejected/failed execution, duplicates,
+stream gaps and lost ACKs. Operation outcomes remain separate from account-state
+continuity. It uses bounded application state and never submits a trade.
+[The recovery guide](examples/RECOVERY.md) explains the output, tests and limits,
+including incomplete deal history and duplicate handling within one snapshot epoch.
 
 ## Installation
 
