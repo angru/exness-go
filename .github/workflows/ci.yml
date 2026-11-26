@@ -54,6 +54,15 @@ jobs:
           go-version: ${{ matrix.go }}
           cache: false
       - run: test -z "$(gofmt -l .)"
+      - run: go mod download
+      - name: Check pinned public API and real-source regressions
+        env:
+          GOPROXY: "off"
+          GOSUMDB: "off"
+          GOTOOLCHAIN: local
+        run: |
+          go run ./tools/apicheck
+          sh tools/check-api-regression.sh
       - run: go vet ./...
       - run: go test -race -cover ./...
       - name: Benchmark correctness smoke (no speed threshold)
