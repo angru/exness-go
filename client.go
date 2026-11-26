@@ -281,7 +281,7 @@ func (c *Client) GetSnapshot(ctx context.Context) (*TradingSnapshot, error) {
 		}
 	}
 	for _, position := range result.Positions {
-		if !validAccount(position.PositionID) || position.CreateTime.IsZero() || position.Direction == "" || position.State == "" || position.Instrument == "" || position.Volume.text == "" {
+		if !validPosition(position) {
 			return nil, &ProtocolError{"Invalid position in snapshot"}
 		}
 	}
@@ -300,5 +300,7 @@ func (c *Client) GetLimits(ctx context.Context) (*Limits, error) {
 }
 
 func validOrder(order Order) bool {
-	return validAccount(order.OrderID) && order.OrderType != "" && order.State != "" && !order.CreateTime.IsZero()
+	return validTradingID(order.OrderID) && optionalID(order.PositionID) && optionalDirection(order.Direction) && optionalInstrument(order.Instrument) &&
+		(order.OrderType == "market" || order.OrderType == "stop" || order.OrderType == "limit" || order.OrderType == "sltp") &&
+		(order.State == "pending_new" || order.State == "placed" || order.State == "filled" || order.State == "cancelled" || order.State == "rejected") && !order.CreateTime.IsZero()
 }

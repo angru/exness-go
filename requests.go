@@ -69,7 +69,7 @@ type AckResponse struct {
 func (a *AckResponse) UnmarshalJSON(data []byte) error {
 	type wire AckResponse
 	var decoded wire
-	if err := json.Unmarshal(data, &decoded); err != nil {
+	if err := decodeResponseObject(data, &decoded, []string{"status"}, []string{"operation_id", "client_request_id"}); err != nil {
 		return &ProtocolError{"Invalid acknowledgement response"}
 	}
 	if decoded.Status != "accepted" {

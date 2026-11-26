@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"iter"
+	"slices"
 	"time"
 )
 
@@ -76,8 +77,8 @@ func validState(state AccountState) bool {
 }
 
 func validPosition(position Position) bool {
-	return validAccount(position.PositionID) && !position.CreateTime.IsZero() &&
-		position.Direction != "" && position.State != "" && position.Instrument != "" && position.Volume.text != ""
+	return validTradingID(position.PositionID) && !position.CreateTime.IsZero() &&
+		slices.Contains([]string{"buy", "sell"}, position.Direction) && slices.Contains([]string{"open", "closed"}, position.State) && instrumentPattern.MatchString(position.Instrument) && position.Volume.text != ""
 }
 
 func tradingDecoder(requestID string) func([]byte) (*TradingStreamEvent, error) {
@@ -141,7 +142,7 @@ func tradingDecoder(requestID string) func([]byte) (*TradingStreamEvent, error) 
 			if event.Status != nil && *event.Status != "success" && *event.Status != "rejected" && *event.Status != "failed" {
 				return invalid()
 			}
-			if event.OperationID != nil && !operationIDPattern.MatchString(*event.OperationID) {
+			if event.OperationID != nil && !validTradingID(*event.OperationID) {
 				return invalid()
 			}
 			for _, order := range event.Payload.Orders {
@@ -155,7 +156,7 @@ func tradingDecoder(requestID string) func([]byte) (*TradingStreamEvent, error) 
 				}
 			}
 			for _, deal := range event.Payload.Deals {
-				if !validAccount(deal.DealID) || deal.Type == "" || deal.CreateTime.IsZero() {
+				if !validDeal(deal) {
 					return invalid()
 				}
 			}

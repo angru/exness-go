@@ -17,13 +17,15 @@ import (
 func ptr(value string) *string { return &value }
 
 func TestSharedOperationCorrelation(t *testing.T) {
+	// These fixtures contain identity fragments, not full server event envelopes.
+	type correlationEvent TransactionEvent
 	var cases []struct {
 		Name      string `json:"name"`
 		Reference struct {
 			OperationID     string `json:"operation_id"`
 			ClientRequestID string `json:"client_request_id"`
 		} `json:"reference"`
-		Candidate TransactionEvent `json:"candidate"`
+		Candidate correlationEvent `json:"candidate"`
 		Outcome   string           `json:"outcome"`
 	}
 	if err := json.Unmarshal(readFixture(t, "operation-correlation-cases"), &cases); err != nil {
@@ -43,7 +45,7 @@ func TestSharedOperationCorrelation(t *testing.T) {
 					t.Fatalf("match=%v err=%v", matched, err)
 				}
 			}
-			check(ref.MatchesEvent(tc.Candidate))
+			check(ref.MatchesEvent(TransactionEvent(tc.Candidate)))
 			if tc.Candidate.Status != nil {
 				t.Fatal("identity must not invent a terminal status")
 			}

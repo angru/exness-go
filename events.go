@@ -211,7 +211,7 @@ func validHmrPeriods(raw json.RawMessage, periods []HmrPeriod) bool {
 		if _, ok := requiredObject(values[i], "period_id", "event_type", "instruments", "leverage", "start_time", "end_time"); !ok {
 			return false
 		}
-		if !operationIDPattern.MatchString(period.PeriodID) || !slices.Contains([]string{"regular", "periodic"}, period.EventType) || len(period.Instruments) == 0 {
+		if !validTradingID(period.PeriodID) || !slices.Contains([]string{"regular", "periodic"}, period.EventType) || len(period.Instruments) == 0 {
 			return false
 		}
 		for _, name := range period.Instruments {
@@ -240,7 +240,7 @@ func hmrDecoder(id string) func([]byte) (*HmrStreamEvent, error) {
 				return nil, invalidServerEvent()
 			}
 			for _, id := range update.RemovedPeriodIDs {
-				if !operationIDPattern.MatchString(id) {
+				if !validTradingID(id) {
 					return nil, invalidServerEvent()
 				}
 			}

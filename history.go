@@ -126,7 +126,7 @@ func (c *Client) GetDealsHistory(ctx context.Context, query DealHistoryQuery) (*
 		return nil, &ProtocolError{"Missing history items"}
 	}
 	for _, item := range result.Items {
-		if item.EventTime.IsZero() || !validAccount(item.Deal.DealID) || item.Deal.Type == "" || item.Deal.CreateTime.IsZero() {
+		if item.EventTime.IsZero() || !validDeal(item.Deal) {
 			return nil, &ProtocolError{"Invalid deal history item"}
 		}
 	}
