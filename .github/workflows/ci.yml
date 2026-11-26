@@ -56,6 +56,9 @@ jobs:
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test -race -cover ./...
+      - name: Benchmark correctness smoke (no speed threshold)
+        if: matrix.go == '1.26.x'
+        run: go test -run '^$' -bench '^(BenchmarkParse|BenchmarkSign)' -benchtime=1x -count=1 -cpu=1 .
       - name: Bounded native fuzzing
         if: matrix.go == '1.27.x'
         shell: bash
