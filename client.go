@@ -1,4 +1,4 @@
-// Package exness provides an unofficial read-only Exness Trading API client.
+// Package exness provides an unofficial Exness Trading API client.
 package exness
 
 import (
@@ -152,14 +152,7 @@ func (c *Client) get(ctx context.Context, host, path string, query url.Values, r
 		return &ProtocolError{"API response exceeds 16 MiB"}
 	}
 	if response.StatusCode != http.StatusOK {
-		var public struct {
-			Code    *int    `json:"code"`
-			Message *string `json:"error_message"`
-		}
-		if json.Unmarshal(body, &public) != nil || public.Code == nil || public.Message == nil {
-			public.Code, public.Message = nil, nil
-		}
-		return &APIError{response.StatusCode, public.Code, public.Message, response.Header.Get("Retry-After")}
+		return decodeAPIError(response, body)
 	}
 	trimmed := strings.TrimSpace(string(body))
 	if trimmed == "" || trimmed[0] != '{' {
@@ -169,6 +162,17 @@ func (c *Client) get(ctx context.Context, host, path string, query url.Values, r
 		return &ProtocolError{"Invalid API response"}
 	}
 	return nil
+}
+
+func decodeAPIError(response *http.Response, body []byte) *APIError {
+	var public struct {
+		Code    *int    `json:"code"`
+		Message *string `json:"error_message"`
+	}
+	if json.Unmarshal(body, &public) != nil || public.Code == nil || public.Message == nil {
+		public.Code, public.Message = nil, nil
+	}
+	return &APIError{response.StatusCode, public.Code, public.Message, response.Header.Get("Retry-After")}
 }
 
 // Discover resolves the account host once. Set refresh after an account migration.

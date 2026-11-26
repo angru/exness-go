@@ -1,6 +1,6 @@
 # Exness Go SDK
 
-Unofficial read-only Exness Trading API client. English code and documentation,
+Unofficial Exness Trading API client. English code and documentation,
 Russian user replies. This project owns its Git history. Go 1.26+.
 
 - `testdata/` contains copies of the Python SDK's synthetic contract/signing

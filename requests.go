@@ -17,7 +17,7 @@ const (
 
 // OpenPositionRequest encodes an opening-position request without network access.
 // Nil optional fields are omitted. Instrument-specific rules remain server decisions.
-// Client submission methods are planned separately; use MarshalJSON to prepare bytes.
+// MarshalJSON prepares validated bytes; Client.OpenPosition submits them once.
 type OpenPositionRequest struct {
 	Instrument      string    `json:"instrument"`
 	Side            TradeSide `json:"side"`

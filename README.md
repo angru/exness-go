@@ -1,6 +1,6 @@
 # Exness Go
 
-Unofficial, read-only Go SDK for the public Exness Trading API (contract 1.0.2).
+Unofficial Go SDK for the public Exness Trading API (contract 1.0.2).
 Alpha v0.1.0-alpha.7; not verified against a live account.
 Go **1.26+**. WebSocket transport uses [coder/websocket](https://github.com/coder/websocket)
 (v1.8.15); REST and signing use the standard library.
@@ -9,17 +9,47 @@ Supports signed Gateway discovery, account details, instrument names and conditi
 trading snapshot, API limits, paginated orders/deals history, candle history and
 existing operation status. All nine read-only REST operations in the pinned
 contract are covered, plus discovery, live WebSocket ticks, transactions and account/instrument/HMR
-events. Trading mutations remain future work.
+events. All five trading submission methods are available on `main`.
 
-## Trading support in development
+## Trading submission on main
 
-The next milestone is typed trading submission followed by explicit result tracking.
-The [implementation plan](TRADING_WRITES.md) defines five stages, the planned methods,
-idempotency rules, acknowledgement handling and recovery after an uncertain outcome.
-On `main`, stage 1 implements request encoding/signing, `OpenPositionRequest` and `AckResponse`.
-Client submission methods follow in stage 2. Stages 1–4 use offline tests;
-live interoperability is a separate final check. See [ROADMAP.md](ROADMAP.md) for status.
-These additions are not in the alpha 7 tag.
+`OpenPosition`, `PlacePendingOrder`, `ModifyOrder`, `CancelPendingOrder` and
+`ClosePosition` take a context, typed request/identifier arguments and an explicit
+caller-managed idempotency key. These untagged additions require the development
+checkout; alpha 7 remains read-only. Trading requires the appropriate write permissions.
+Persist the key before sending; use 5–128 characters from `A-Z a-z 0-9 . _ - ~`.
+
+Request types are `OpenPositionRequest`, `LimitOrderRequest`, `StopOrderRequest`,
+`SltpOrderRequest`, `ModifyOrderRequest` and `ClosePositionRequest`. The three pending
+order variants implement `PendingOrderRequest`. Construct exact numbers with
+`NewDecimal`; validation runs before discovery and submission.
+
+```go
+// With a configured client, context, orderID and persisted requestKey:
+request := exness.ModifyOrderRequest{StopLossPrice: exness.ClearPrice()}
+ack, err := client.ModifyOrder(ctx, orderID, request, requestKey)
+if err != nil { return err }
+// ack.Status == "accepted" acknowledges admission, not execution.
+```
+
+A zero-value `PriceChange` omits SL/TP, `SetPrice(decimal)` replaces it and
+`ClearPrice()` sends null. A comment-only modification is invalid. Close options
+are query parameters with an empty DELETE body. Empty `ClosePositionRequest{}`
+requests full closure; zero volume is valid only with `CloseByPositionID`.
+
+ACK operation IDs may be absent. A mismatched echoed client request ID is an
+unknown outcome. Use `errors.As` for `*UnknownOutcomeError` and inspect Method,
+Path (without query), AccountID and IdempotencyKey. `errors.As`/`errors.Is` also
+reach the underlying API/protocol/transport error and context cancellation.
+Preflight cancellation is a normal transport error; cancellation after entering
+write transport is an unknown outcome. Cancellation does not roll back a write.
+Identity fields and raw bodies are excluded from error text; unwrapped causes and
+server fields remain untrusted. Reconcile before deciding whether to retry.
+
+No implicit condition reads, polling, redirects or write retries are performed.
+The [implementation plan](TRADING_WRITES.md) documents error policy and remaining
+work. Stages 1–2 are verified offline; result tracking is next. Live interoperability
+remains unverified.
 
 ## Installation
 
@@ -152,7 +182,7 @@ not success. Rejection/failure codes remain model fields; HTTP failures return
   safe for concurrent use. Environment proxies are ignored by the default transport.
 - REST calls have no SDK retry loop; HTTP errors including 429 are returned directly.
   The Go HTTP transport may recover stale pooled connections for safe GETs.
-- Use `errors.As` for `*APIError`, `*ProtocolError`, `*TransportError`.
+- Use `errors.As` for `*APIError`, `*ProtocolError`, `*TransportError`, `*UnknownOutcomeError`.
   `APIError` exposes status, optional numeric code/message and raw Retry-After.
   Error strings do not echo credentials or raw response bodies. `ErrorMessage`
   and an unwrapped transport cause may contain untrusted details; do not log them
